@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Listening Test</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="questions.js"></script>
+    <script src="utils.js"></script>
+</head>
+<body>
+    <div class="card">
+        <div id="exam-ui">
+            <p id="p-text" style="text-align:center; color:gray; font-size:0.8rem;"></p>
+            <div style="text-align:center; margin: 40px 0;">
+                <button onclick="playNow()" style="background:var(--primary); border:none; border-radius:50%; width:100px; height:100px; cursor:pointer; font-size:40px; color:white; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">▶</button>
+                <p style="margin-top:15px; color:var(--primary); font-weight:bold;">Listen to Question</p>
+            </div>
+            
+            <div id="q-text" style="display:none;"></div> 
+
+            <input type="text" id="user-ans" placeholder="What did you hear?" autocomplete="off" style="margin-top:20px;">
+            <button class="btn" style="background:var(--success); color:white;" onclick="next()">Next Question</button>
+        </div>
+
+        <div id="result-ui" style="display:none;">
+            <h1>Listening Result</h1>
+            <h2 id="score" style="text-align:center; color:var(--primary); font-size:2.5rem; margin:10px 0;"></h2>
+            <div id="review" style="font-size:0.85rem; max-height:40vh; overflow-y:auto; border-top:1px solid #eee;"></div>
+            <button class="btn" style="background:var(--primary); color:white; margin-top:20px;" onclick="location.reload()">Try Again</button>
+        </div>
+        <a href="index.html" class="back-link">Exit to Menu</a>
+    </div>
+
+    <script>
+        let qs = [...quizData].sort(() => Math.random() - 0.5).slice(0, 20);
+        let idx = 0, userAns = [];
+
+        function show() {
+            document.getElementById('p-text').innerText = `QUESTION ${idx + 1} OF 20`;
+            document.getElementById('user-ans').value = "";
+            document.getElementById('user-ans').focus();
+            playNow();
+        }
+
+        function playNow() {
+            playQuestionAudio(qs[idx].id);
+        }
+
+        function next() {
+            userAns.push(document.getElementById('user-ans').value);
+            if (++idx < 20) show(); else finish();
+        }
+
+        function finish() {
+            document.getElementById('exam-ui').style.display = 'none';
+            document.getElementById('result-ui').style.display = 'block';
+            let score = 0, html = "";
+            qs.forEach((q, i) => {
+                const isCorrect = checkIsCorrect(userAns[i], q.a, q.q);
+                if (isCorrect) score++;
+                html += `<div style="border-bottom:1px solid #eee; padding:12px 0;">
+                    <div style="font-weight:bold;">${q.id}. ${q.q}</div>
+                    <div style="color:${isCorrect ? 'var(--success)' : '#e74c3c'}">My: ${userAns[i] || "(Empty)"}</div>
+                    <div style="color:gray; font-size:0.8rem;">A: ${q.a}</div>
+                </div>`;
+            });
+            document.getElementById('score').innerText = `${score} / 20`;
+            document.getElementById('review').innerHTML = html;
+        }
+
+        document.getElementById('user-ans').addEventListener('keypress', (e) => { if(e.key==='Enter') next(); });
+        show();
+    </script>
+</body>
+</html>

@@ -90,3 +90,19 @@ function speakText(text, callback) {
     u.onend = () => { if(callback) callback(); };
     window.speechSynthesis.speak(u);
 }
+
+function playQuestionAudio(id, callback) {
+    // ID를 3자리 숫자로 변환 (1 -> 001, 10 -> 010)
+    const padId = String(id).padStart(3, '0');
+    const audio = new Audio(`audio/q${padId}.mp3`);
+
+    if (callback) {
+        audio.onended = callback;
+    }
+
+    audio.play().catch(e => {
+        console.error("Audio file not found:", e);
+        // 파일이 없을 경우 기존 TTS로 백업 (선택 사항)
+        // speakText("Audio file missing"); 
+    });
+}
