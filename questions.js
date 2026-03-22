@@ -14,7 +14,11 @@ const quizData = [
     { id: 13, q: "What is the rule of law?", a: "Everyone must follow the law / Leaders must obey the law / Government must obey the law / No one is above the law" },
     { id: 14, q: "Many documents influenced the U.S. Constitution. Name one.", a: "Declaration of Independence / Articles of Confederation / Federalist Papers / Anti-Federalist Papers / Virginia Declaration of Rights / Fundamental Orders of Connecticut / Mayflower Compact / Iroquois Great Law of Peace" },
     { id: 15, q: "There are three branches of government. Why?", a: "So one part does not become too powerful / Checks and balances / Separation of powers" },
-    { id: 16, q: "Name the three branches of government.", a: "Legislative, executive, and judicial / Congress, president, and the courts" },
+    {
+        id: 16,
+        q: "Name the three branches of government.",
+        a: "Legislative, executive, and judicial | Congress, president, and the courts"
+    },
     { id: 17, q: "The President of the United States is in charge of which branch of government?", a: "Executive branch" },
     { id: 18, q: "What part of the federal government writes laws?", a: "U.S. Congress / U.S. or national legislature / Legislative branch" },
     { id: 19, q: "What are the two parts of the U.S. Congress?", a: "Senate and House of Representatives" },

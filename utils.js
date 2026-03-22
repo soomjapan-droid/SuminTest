@@ -16,62 +16,67 @@ function clean(str) {
 
 function checkIsCorrect(user, real, questionText) {
     if (!user) return false;
-
-    const userClean = clean(user).replace(/[()]/g, "");
+    const userClean = clean(user); // 소문자화 + 기호 제거
     const qLower = questionText.toLowerCase();
 
-    // 1. '/'로 정답 뭉치 분리 및 각 정답의 '핵심 버전' 생성
-    let rawAnswers = real.split('/').map(ans => ans.trim());
-    let possibleAnswers = [];
+    // 1. '|'를 기준으로 서로 다른 '정답 세트'를 분리 (예: 16번 문제)
+    const answerSets = real.split('|').map(set => set.trim());
 
-    rawAnswers.forEach(ans => {
-        const cAns = clean(ans);
-        // 괄호가 있다면 괄호 제거 버전, 전체 버전, 괄호 안 버전 모두 추가
-        if (cAns.includes('(') || cAns.includes(')')) {
-            const mainPart = cAns.replace(/\s*\([^)]*\)/g, "").trim();
-            const fullPart = cAns.replace(/[()]/g, "").trim();
-            possibleAnswers.push(mainPart, fullPart);
-        } else {
-            possibleAnswers.push(cAns);
-        }
-    });
+    // 2. 각 세트 중 하나라도 완벽하게 만족하는지 확인 (some)
+    return answerSets.some(set => {
+        // 세트 내의 개별 키워드들을 분리 (/, 또는 , 기준)
+        // 'and'는 채점에 방해되므로 제거
+        let keywords = set.split(/[,/]/)
+            .map(k => clean(k.replace(/\band\b/g, "")))
+            .filter(k => k.length > 1);
 
-    // 2. 요구 정답 개수 파악
-    let requiredCount = 1;
-    if (qLower.includes("three")) requiredCount = 3;
-    else if (qLower.includes("two")) requiredCount = 2;
+        // 괄호 처리: 세트 내 각 키워드에 괄호가 있다면 괄호 밖/안 모두 후보로 등록
+        let finalKeywords = [];
+        keywords.forEach(kw => {
+            if (kw.includes('(')) {
+                const mainPart = kw.replace(/\s*\([^)]*\)/g, "").trim();
+                const fullPart = kw.replace(/[()]/g, "").trim();
+                finalKeywords.push(mainPart, fullPart);
+            } else {
+                finalKeywords.push(kw);
+            }
+        });
 
-    // 3. 스마트 매칭 (부분 일치 허용)
-    let foundCount = 0;
-    let tempUserAns = userClean;
+        // 요구 정답 개수 파악
+        let requiredMatch = finalKeywords.length;
+        if (qLower.includes("three")) requiredMatch = 3;
+        else if (qLower.includes("two")) requiredMatch = 2;
 
-    // 긴 정답 후보부터 대조 (정확도 향상)
-    const sortedAnswers = [...new Set(possibleAnswers)].sort((a, b) => b.length - a.length);
+        let matchCount = 0;
+        let tempUserAns = userClean;
+        let foundForThisSet = [];
 
-    sortedAnswers.forEach(target => {
-        if (target.length < 2) return; // 너무 짧은 단어는 무시
+        // 긴 단어부터 매칭하여 중복/부분 일치 오류 방지
+        const sortedKeywords = [...new Set(finalKeywords)].sort((a, b) => b.length - a.length);
 
-        // 사용자가 정답의 핵심을 포함하고 있거나 (예: "So one part does not...")
-        // 정답 후보가 사용자의 입력을 포함하고 있는 경우 (예: "22nd Amendment" vs "22nd")
-        if (tempUserAns.includes(target) || target.includes(tempUserAns)) {
-            foundCount++;
-            // 찾은 부분은 제거하여 중복 카운트 방지
-            tempUserAns = tempUserAns.replace(target, " ");
-        }
-    });
+        sortedKeywords.forEach(target => {
+            // 사용자가 입력한 문장에 키워드가 포함되어 있는지 확인
+            if (tempUserAns.includes(target) && !foundForThisSet.includes(target)) {
+                matchCount++;
+                foundForThisSet.push(target);
+                tempUserAns = tempUserAns.replace(target, " "); // 찾은 단어는 제외
+            }
+        });
 
-    // 숫자 변환 체크 (예: 27 vs twenty-seven)
-    if (foundCount < requiredCount) {
-        for (let num in numMap) {
-            if (userClean.includes(num) || userClean.includes(numMap[num])) {
-                if (possibleAnswers.some(a => a.includes(num) || a.includes(numMap[num]))) {
-                    foundCount++;
+        // 숫자-영단어 변환 체크 (예: 27 vs twenty-seven)
+        if (matchCount < requiredMatch) {
+            for (let num in numMap) {
+                if (userClean.includes(num) || userClean.includes(numMap[num])) {
+                    if (sortedKeywords.some(k => k.includes(num) || k.includes(numMap[num]))) {
+                        matchCount++;
+                    }
                 }
             }
         }
-    }
 
-    return foundCount >= requiredCount;
+        // 현재 검사 중인 '세트'의 조건을 모두 충족해야만 true
+        return matchCount >= requiredMatch;
+    });
 }
 
 function speakText(text, callback) {
