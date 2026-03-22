@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AZ Civics - Study List</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="questions.js"></script>
+    <script src="utils.js"></script>
+    <style>
+        .play-controls {
+            display: flex;
+            gap: 10px;
+            position: sticky;
+            top: 0;
+            background: var(--white);
+            padding: 10px 0;
+            z-index: 100;
+            border-bottom: 2px solid var(--bg);
+        }
+        .playing {
+            background: #fff3cd !important;
+            border-left: 5px solid var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <div class="card" style="max-width: 600px;">
+        <h1>Study List</h1>
+        <p class="subtitle">128 Questions (Auto-Audio Support)</p>
+
+        <div class="play-controls">
+            <button id="btn-play-all" class="btn" style="background: var(--primary); color: white; margin:0;" onclick="startAutoPlay()">▶ Play All</button>
+            <button id="btn-stop" class="btn" style="background: var(--secondary); color: white; margin:0; display:none;" onclick="stopAutoPlay()">■ Stop</button>
+        </div>
+
+        <input type="text" id="search" placeholder="Search by keywords..." onkeyup="render()" style="margin-top:20px;">
+        
+        <div id="list-container"></div>
+        
+        <a href="index.html" class="back-link">← Exit to Menu</a>
+    </div>
+
+    <script>
+        let isPlaying = false;
+        let currentPlayIdx = 0;
+
+        function render() {
+            const k = document.getElementById('search').value.toLowerCase();
+            const container = document.getElementById('list-container');
+            container.innerHTML = quizData
+                .filter(i => i.q.toLowerCase().includes(k) || i.a.toLowerCase().includes(k))
+                .map(i => `
+                    <div class="q-item" id="q-row-${i.id}">
+                        <span class="question">${i.id}. ${i.q}</span>
+                        <span class="answer-text">A: ${i.a}</span>
+                    </div>
+                `).join('');
+        }
+
+        // 전체 재생 시작
+        async function startAutoPlay() {
+            if (isPlaying) return;
+            isPlaying = true;
+            document.getElementById('btn-play-all').style.display = 'none';
+            document.getElementById('btn-stop').style.display = 'block';
+            
+            for (let i = currentPlayIdx; i < quizData.length; i++) {
+                if (!isPlaying) break;
+                currentPlayIdx = i;
+                
+                // 해당 문제로 스크롤 및 강조
+                const row = document.getElementById(`q-row-${quizData[i].id}`);
+                if (row) {
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    row.classList.add('playing');
+                }
+
+                // 문제 읽기
+                await speakPromise(`Question number ${quizData[i].id}. ${quizData[i].q}`);
+                await sleep(500); // 문제와 답 사이 짧은 쉼
+                
+                // 정답 읽기
+                await speakPromise(`Answer. ${quizData[i].a}`);
+                
+                if (row) row.classList.remove('playing');
+                await sleep(1500); // 다음 문제로 넘어가기 전 1.5초 쉼
+            }
+            
+            if (currentPlayIdx >= quizData.length - 1) stopAutoPlay();
+        }
+
+        // 재생 중지
+        function stopAutoPlay() {
+            isPlaying = false;
+            window.speechSynthesis.cancel();
+            document.getElementById('btn-play-all').style.display = 'block';
+            document.getElementById('btn-stop').style.display = 'none';
+            // 모든 강조 제거
+            document.querySelectorAll('.q-item').forEach(el => el.classList.remove('playing'));
+        }
+
+        // TTS를 Promise로 감싸서 순차 재생 가능하게 함
+        function speakPromise(text) {
+            return new Promise((resolve) => {
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'en-US';
+                u.rate = 0.9;
+                u.onend = resolve;
+                window.speechSynthesis.speak(u);
+            });
+        }
+
+        function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+        render();
+    </script>
+</body>
+</html>

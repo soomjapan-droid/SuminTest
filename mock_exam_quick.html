@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Quick 10 Quiz (Guest)</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="questions.js"></script>
+    <script src="utils.js"></script>
+</head>
+<body>
+    <div class="card">
+        <div id="exam-ui">
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:gray; margin-bottom:10px;">
+                <span id="p-text"></span>
+                <span>General U.S. Quiz (No State Questions)</span>
+            </div>
+            <div style="text-align:center; margin: 15px 0;"><span class="speaker-icon" onclick="speakNow()" style="font-size: 40px; cursor: pointer;">🔊</span></div>
+            <div id="q-text" class="question" style="margin-bottom:20px; min-height:60px; text-align:center; font-size:1.2rem;"></div>
+            <input type="text" id="user-ans" placeholder="Type your answer..." autocomplete="off">
+            <button class="btn" style="background:var(--success); color:white;" onclick="next()">Next Question</button>
+        </div>
+
+        <div id="result-ui" style="display:none;">
+            <h1>Quiz Result</h1>
+            <h2 id="score" style="text-align:center; color:var(--primary); font-size:2.5rem; margin:10px 0;"></h2>
+            <div id="review" style="font-size:0.85rem; max-height:40vh; overflow-y:auto; border-top:1px solid #eee;"></div>
+            <button class="btn" style="background:var(--primary); color:white; margin-top:20px;" onclick="location.reload()">Play Again</button>
+            <a href="index.html" class="btn" style="background:var(--secondary); color:white; text-decoration:none; display:block; text-align:center; margin-top:10px;">Back to Menu</a>
+        </div>
+        <a href="index.html" class="back-link">Exit</a>
+    </div>
+
+    <script>
+        // 1. 주 관련 문제(23, 29, 61, 62)를 제외한 데이터 생성
+        const filteredData = quizData.filter(q => ![23, 29, 61, 62].includes(q.id));
+        
+        // 2. 제외된 리스트에서 무작위 10개 추출
+        let qs = [...filteredData].sort(() => Math.random() - 0.5).slice(0, 10);
+        let idx = 0, userAns = [];
+
+        function show() {
+            document.getElementById('p-text').innerText = `QUESTION ${idx + 1} OF 10`;
+            document.getElementById('q-text').innerText = qs[idx].q;
+            document.getElementById('user-ans').value = "";
+            document.getElementById('user-ans').focus();
+            setTimeout(speakNow, 500);
+        }
+
+        function speakNow() { speakText(qs[idx].q); }
+
+        function next() {
+            userAns.push(document.getElementById('user-ans').value);
+            if (++idx < 10) show(); else finish();
+        }
+
+        function finish() {
+            window.speechSynthesis.cancel();
+            document.getElementById('exam-ui').style.display = 'none';
+            document.getElementById('result-ui').style.display = 'block';
+            let score = 0, html = "";
+            qs.forEach((q, i) => {
+                // finish 함수 내부 (forEach 문 안에서)
+                const isCorrect = checkIsCorrect(userAns[i], q.a, q.q); 
+                if (isCorrect) score++;
+                html += `<div style="border-bottom:1px solid #eee; padding:12px 0;">
+                    <div style="font-weight:bold;">${q.id}. ${q.q}</div>
+                    <div style="color:${isCorrect ? 'var(--success)' : '#e74c3c'}">My: ${userAns[i] || "(Empty)"} ${isCorrect ? '✓' : '✗'}</div>
+                    <div style="color:gray; font-size:0.8rem;">Correct: ${q.a}</div>
+                </div>`;
+            });
+            document.getElementById('score').innerText = `${score} / 10`;
+            document.getElementById('review').innerHTML = html;
+        }
+
+        document.getElementById('user-ans').addEventListener('keypress', (e) => { if(e.key==='Enter') next(); });
+        show();
+    </script>
+</body>
+</html>

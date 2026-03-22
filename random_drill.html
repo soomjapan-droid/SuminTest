@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Random Practice</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="questions.js"></script>
+    <script src="utils.js"></script>
+</head>
+<body>
+    <div class="card">
+        <div id="drill-ui">
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:gray; margin-bottom:10px;">
+                <span id="progress-text"></span>
+                <span id="mastery-status"></span>
+            </div>
+            
+            <div style="text-align:center; margin: 10px 0;">
+                <span class="speaker-icon" onclick="speakNow()" style="font-size: 40px; cursor: pointer;">🔊</span>
+            </div>
+
+            <div id="q-text" class="question" style="font-size:1.2rem; margin-bottom:20px; text-align:center;"></div>
+            
+            <input type="text" id="user-ans" placeholder="Type your answer..." autocomplete="off">
+            
+            <div id="result-mark" style="text-align:center; font-size:1.5rem; font-weight:bold; margin-bottom:10px;"></div>
+
+            <div id="ans-box" style="display:none; padding:15px; background:#f9f9f9; border-radius:10px; margin-bottom:15px;">
+                <b id="ans-label"></b> <span id="real-ans"></span>
+            </div>
+
+            <button id="btn" class="btn" style="background:var(--accent); color:white;" onclick="handle()">Check Answer</button>
+            <button class="btn" style="background:var(--secondary); color:white; margin-top:10px;" onclick="resetMastery()">Reset Progress</button>
+        </div>
+        
+        <a href="index.html" class="back-link">Exit to Menu</a>
+    </div>
+
+    <script>
+        // 1. 저장된 진도 불러오기 (Mock Exam과 데이터 공유)
+        let masteredIds = JSON.parse(localStorage.getItem('masteredIds') || '[]');
+        
+        // 2. 아직 맞히지 못한 문제만 무작위 정렬
+        let availableQs = quizData.filter(q => !masteredIds.includes(q.id));
+        let qs = [...availableQs].sort(() => Math.random() - 0.5);
+        let idx = 0;
+
+        function show() {
+            if (qs.length === 0) {
+                document.getElementById('drill-ui').innerHTML = `
+                    <h2 style="text-align:center;">All Mastered! 🎉</h2>
+                    <p style="text-align:center; color:gray;">You have learned all 128 questions.</p>
+                    <button class="btn" style="background:var(--primary); color:white;" onclick="resetMastery()">Start Over</button>
+                `;
+                return;
+            }
+
+            document.getElementById('progress-text').innerText = `Question ${idx + 1} / ${qs.length}`;
+            document.getElementById('mastery-status').innerText = `Mastered: ${masteredIds.length} / ${quizData.length}`;
+            document.getElementById('q-text').innerText = qs[idx].q;
+            document.getElementById('user-ans').value = "";
+            document.getElementById('user-ans').disabled = false;
+            document.getElementById('ans-box').style.display = 'none';
+            document.getElementById('result-mark').innerText = "";
+            document.getElementById('btn').innerText = "Check Answer";
+            document.getElementById('user-ans').focus();
+            setTimeout(speakNow, 500);
+        }
+
+        function speakNow() { speakText(qs[idx].q); }
+
+        function handle() {
+            const btn = document.getElementById('btn');
+            const box = document.getElementById('ans-box');
+            const mark = document.getElementById('result-mark');
+            const user = document.getElementById('user-ans').value;
+
+            if (box.style.display === 'none') {
+                // handle 함수 내부
+                const isCorrect = checkIsCorrect(user, qs[idx].a, qs[idx].q);
+
+                if (isCorrect) {
+                    mark.innerText = "CORRECT!";
+                    mark.style.color = "var(--success)";
+                    // 맞힌 경우 로컬 스토리지에 추가
+                    if (!masteredIds.includes(qs[idx].id)) {
+                        masteredIds.push(qs[idx].id);
+                        localStorage.setItem('masteredIds', JSON.stringify(masteredIds));
+                    }
+                } else {
+                    mark.innerText = "WRONG!";
+                    mark.style.color = "#e74c3c";
+                }
+                
+                document.getElementById('ans-label').innerText = isCorrect ? "Acceptable:" : "Correct Answer:";
+                document.getElementById('real-ans').innerText = qs[idx].a;
+                document.getElementById('user-ans').disabled = true;
+                box.style.display = 'block';
+                btn.innerText = "Next Question";
+            } else {
+                // 다음 문제로 넘어갈 때 현재 목록을 최신화 (맞힌 문제는 다음 루프에서 빠짐)
+                idx++;
+                if (idx >= qs.length) {
+                    // 한 바퀴 돌았으면 다시 섞어서 남은 문제들로 재시작
+                    availableQs = quizData.filter(q => !masteredIds.includes(q.id));
+                    qs = [...availableQs].sort(() => Math.random() - 0.5);
+                    idx = 0;
+                }
+                show();
+            }
+        }
+
+        function resetMastery() {
+            if (confirm("Reset all progress and start over?")) {
+                localStorage.removeItem('masteredIds');
+                masteredIds = [];
+                availableQs = [...quizData];
+                qs = [...availableQs].sort(() => Math.random() - 0.5);
+                idx = 0;
+                show();
+            }
+        }
+
+        document.getElementById('user-ans').addEventListener('keypress', (e) => { if(e.key==='Enter') handle(); });
+        show();
+    </script>
+</body>
+</html>

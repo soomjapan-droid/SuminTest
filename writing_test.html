@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="En">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="style.css">
+    <script src="writing_data.js"></script>
+</head>
+<body>
+    <div class="card">
+        <h1>Writing Test</h1>
+        <div style="text-align:center;">
+            <span class="speaker-icon" onclick="speak()">🔊</span>
+            <p style="color:gray; font-size:0.8rem;">Click the icon and listen</p>
+        </div>
+        <input type="text" id="user-ans" placeholder="Type the answer...">
+        <div id="ans-box" style="display:none; padding:15px; background:#f4f1f8; border-radius:10px; border-left:4px solid var(--writing); margin-bottom:15px;">
+            <small>Answer:</small><br><strong id="real-ans"></strong>
+        </div>
+        <button id="btn" class="btn" style="background:var(--writing); color:white;" onclick="handle()">Check the Answer</button>
+        <a href="index.html" class="back-link">stop</a>
+    </div>
+    <script>
+        let items = [...writingData].sort(() => Math.random() - 0.5), idx = 0;
+        function speak() {
+            const u = new SpeechSynthesisUtterance(items[idx].sentence);
+            u.lang = 'en-US'; u.rate = 0.8; window.speechSynthesis.speak(u);
+        }
+        function handle() {
+            const box = document.getElementById('ans-box');
+            if (box.style.display === 'none') {
+                document.getElementById('real-ans').innerText = items[idx].sentence;
+                box.style.display = 'block';
+                document.getElementById('btn').innerText = "Next";
+            } else {
+                idx++; if(idx >= items.length) idx = 0;
+                document.getElementById('user-ans').value = "";
+                box.style.display = 'none';
+                document.getElementById('btn').innerText = "Check the answer";
+                setTimeout(speak, 500);
+            }
+        }
+        setTimeout(speak, 800);
+    </script>
+</body>
+</html>
