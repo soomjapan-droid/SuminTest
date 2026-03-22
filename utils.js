@@ -7,78 +7,83 @@ const numMap = {
     "100": "one hundred", "435": "four hundred thirty-five"
 };
 
-
+// 함수 이름은 유지하되, 내부 로직을 관사/전치사 제거 방식으로 강화
 function clean(str) {
     if (!str) return "";
-    // 소문자화 및 불필요한 기호 제거, 괄호 내용 처리 전 단계
-    return str.toLowerCase().replace(/[.,!]/g, "").trim();
+    return str.toLowerCase()
+        .replace(/[.,!?;:]/g, "") // 문장부호 제거
+        .replace(/\b(the|a|an|is|are|of|to|and|in|at)\b/g, "") // 채점에 방해되는 관사/전치사 제거
+        .replace(/\s+/g, " ") // 중복 공백 제거
+        .trim();
 }
 
 function checkIsCorrect(user, real, questionText) {
     if (!user) return false;
-    const userClean = clean(user); // 소문자화 + 기호 제거
+    
+    const uClean = clean(user); // 이제 여기서 강화된 로직이 작동합니다.
     const qLower = questionText.toLowerCase();
 
-    // 1. '|'를 기준으로 서로 다른 '정답 세트'를 분리 (예: 16번 문제)
-    const answerSets = real.split('|').map(set => set.trim());
+    // 1. 세트 분리 (|)
+    const sets = real.split('|').map(s => s.trim());
 
-    // 2. 각 세트 중 하나라도 완벽하게 만족하는지 확인 (some)
-    return answerSets.some(set => {
-        // 세트 내의 개별 키워드들을 분리 (/, 또는 , 기준)
-        // 'and'는 채점에 방해되므로 제거
-        let keywords = set.split(/[,/]/)
-            .map(k => clean(k.replace(/\band\b/g, "")))
-            .filter(k => k.length > 1);
-
-        // 괄호 처리: 세트 내 각 키워드에 괄호가 있다면 괄호 밖/안 모두 후보로 등록
-        let finalKeywords = [];
-        keywords.forEach(kw => {
-            if (kw.includes('(')) {
-                const mainPart = kw.replace(/\s*\([^)]*\)/g, "").trim();
-                const fullPart = kw.replace(/[()]/g, "").trim();
-                finalKeywords.push(mainPart, fullPart);
+    return sets.some(set => {
+        // 2. 개별 정답 후보 분리 (/)
+        let targets = set.split('/').map(t => t.trim());
+        
+        // 3. 괄호 처리 포함 후보군 생성
+        let finalCandidates = [];
+        targets.forEach(t => {
+            let base = t.toLowerCase().replace(/[.,!?;:]/g, "");
+            
+            if (base.includes('(')) {
+                const main = base.replace(/\([^)]*\)/g, "").trim();
+                const bracket = base.match(/\(([^)]+)\)/)[1].trim();
+                const full = base.replace(/[()]/g, "").trim();
+                finalCandidates.push(main, bracket, full);
             } else {
-                finalKeywords.push(kw);
+                finalCandidates.push(base);
             }
         });
 
-        // 요구 정답 개수 파악
-        let requiredMatch = finalKeywords.length;
-        if (qLower.includes("three")) requiredMatch = 3;
-        else if (qLower.includes("two")) requiredMatch = 2;
+        // 4. 요구 정답 개수 파악
+        let required = 1;
+        if (qLower.includes("three")) required = 3;
+        else if (qLower.includes("two")) required = 2;
 
-        let matchCount = 0;
-        let tempUserAns = userClean;
-        let foundForThisSet = [];
+        let found = 0;
+        let tempUser = uClean;
+        let matchedTargets = new Set();
 
-        // 긴 단어부터 매칭하여 중복/부분 일치 오류 방지
-        const sortedKeywords = [...new Set(finalKeywords)].sort((a, b) => b.length - a.length);
+        // 5. 핵심 키워드 매칭 (긴 단어 우선)
+        const sortedCandidates = [...new Set(finalCandidates)].sort((a, b) => b.length - a.length);
 
-        sortedKeywords.forEach(target => {
-            // 사용자가 입력한 문장에 키워드가 포함되어 있는지 확인
-            if (tempUserAns.includes(target) && !foundForThisSet.includes(target)) {
-                matchCount++;
-                foundForThisSet.push(target);
-                tempUserAns = tempUserAns.replace(target, " "); // 찾은 단어는 제외
-            }
-        });
+        sortedCandidates.forEach(cand => {
+            const candClean = clean(cand); // 후보군도 동일하게 강화된 clean 적용
+            if (candClean.length < 1) return;
 
-        // 숫자-영단어 변환 체크 (예: 27 vs twenty-seven)
-        if (matchCount < requiredMatch) {
-            for (let num in numMap) {
-                if (userClean.includes(num) || userClean.includes(numMap[num])) {
-                    if (sortedKeywords.some(k => k.includes(num) || k.includes(numMap[num]))) {
-                        matchCount++;
-                    }
+            // 숫자 호환성 체크 (예: 25번 문제 '2' vs 'two')
+            let isNumMatch = false;
+            for (let [num, word] of Object.entries(numMap)) {
+                if ((uClean.includes(num) || uClean.includes(word)) && 
+                    (candClean.includes(num) || candClean.includes(word))) {
+                    isNumMatch = true;
+                    break;
                 }
             }
-        }
 
-        // 현재 검사 중인 '세트'의 조건을 모두 충족해야만 true
-        return matchCount >= requiredMatch;
+            // 부분 일치 혹은 숫자 일치 확인
+            if (tempUser.includes(candClean) || candClean.includes(tempUser) || isNumMatch) {
+                if (!matchedTargets.has(candClean)) {
+                    found++;
+                    matchedTargets.add(candClean);
+                    tempUser = tempUser.replace(candClean, "");
+                }
+            }
+        });
+
+        return found >= required;
     });
 }
-
 function speakText(text, callback) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
