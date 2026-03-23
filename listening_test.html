@@ -11,7 +11,11 @@
 <body>
     <div class="card">
         <div id="exam-ui">
-            <p id="p-text" style="text-align:center; color:gray; font-size:0.8rem;"></p>
+            <div id="exam-info" style="display:flex; justify-content:space-between; font-size:0.8rem; color:gray; margin-bottom:10px;">
+                <span id="p-text"></span>
+                <span id="remaining-info"></span>
+            </div>
+            
             <div style="text-align:center; margin: 40px 0;">
                 <button onclick="playNow()" style="background:var(--primary); border:none; border-radius:50%; width:100px; height:100px; cursor:pointer; font-size:40px; color:white; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">▶</button>
                 <p style="margin-top:15px; color:var(--primary); font-weight:bold;">Listen to Question</p>
@@ -26,21 +30,42 @@
         <div id="result-ui" style="display:none;">
             <h1>Listening Result</h1>
             <h2 id="score" style="text-align:center; color:var(--primary); font-size:2.5rem; margin:10px 0;"></h2>
-            <div id="review" style="font-size:0.85rem; max-height:40vh; overflow-y:auto; border-top:1px solid #eee;"></div>
-            <button class="btn" style="background:var(--primary); color:white; margin-top:20px;" onclick="location.reload()">Try Again</button>
+            <p id="pass-fail" style="text-align:center; font-weight:bold; margin-bottom:10px;"></p>
+            <div id="mastery-info" style="text-align:center; font-size:0.9rem; margin-bottom:20px; color:#666;"></div>
+            
+            <div id="review" style="font-size:0.85rem; max-height:35vh; overflow-y:auto; border-top:1px solid #eee;"></div>
+            
+            <button class="btn" style="background:var(--primary); color:white; margin-top:20px;" onclick="location.reload()">Next 20 Questions</button>
+            <button class="btn" style="background:var(--secondary); color:white; margin-top:10px;" onclick="resetMastery()">Reset All Progress</button>
         </div>
         <a href="index.html" class="back-link">Exit to Menu</a>
     </div>
 
     <script>
-        let qs = [...quizData].sort(() => Math.random() - 0.5).slice(0, 20);
-        let idx = 0, userAns = [];
+        // 1. 학습 데이터 로드 (모든 모드 공용)
+        let masteredIds = JSON.parse(localStorage.getItem('masteredIds') || '[]');
+        
+        // 2. 아직 맞히지 못한 문제들 필터링
+        let availableQs = quizData.filter(q => !masteredIds.includes(q.id));
+        
+        // 모든 문제를 다 맞혔을 경우 처리
+        if (availableQs.length === 0) {
+            alert("All questions mastered! Resetting for review.");
+            resetMastery();
+        }
+
+        // 3. 남은 문제 중 무작위 20개 선택
+        let examCount = Math.min(20, availableQs.length);
+        let qs = [...availableQs].sort(() => Math.random() - 0.5).slice(0, examCount);
+        
+        let idx = 0, userAns = [], sessionCorrectIds = [];
 
         function show() {
-            document.getElementById('p-text').innerText = `QUESTION ${idx + 1} OF 20`;
+            document.getElementById('p-text').innerText = `QUESTION ${idx + 1} OF ${examCount}`;
+            document.getElementById('remaining-info').innerText = `To Learn: ${availableQs.length}`;
             document.getElementById('user-ans').value = "";
             document.getElementById('user-ans').focus();
-            playNow();
+            setTimeout(playNow, 500); // 0.5초 후 자동 재생
         }
 
         function playNow() {
@@ -48,25 +73,50 @@
         }
 
         function next() {
-            userAns.push(document.getElementById('user-ans').value);
-            if (++idx < 20) show(); else finish();
+            const currentAns = document.getElementById('user-ans').value;
+            userAns.push(currentAns);
+            
+            // 실시간 정답 체크하여 세션 기록
+            if (checkIsCorrect(currentAns, qs[idx].a, qs[idx].q)) {
+                sessionCorrectIds.push(qs[idx].id);
+            }
+
+            if (++idx < examCount) show(); else finish();
         }
 
         function finish() {
+            // 새롭게 맞힌 문제들 합산 저장
+            masteredIds = [...new Set([...masteredIds, ...sessionCorrectIds])];
+            localStorage.setItem('masteredIds', JSON.stringify(masteredIds));
+
             document.getElementById('exam-ui').style.display = 'none';
             document.getElementById('result-ui').style.display = 'block';
+            
             let score = 0, html = "";
             qs.forEach((q, i) => {
                 const isCorrect = checkIsCorrect(userAns[i], q.a, q.q);
                 if (isCorrect) score++;
                 html += `<div style="border-bottom:1px solid #eee; padding:12px 0;">
                     <div style="font-weight:bold;">${q.id}. ${q.q}</div>
-                    <div style="color:${isCorrect ? 'var(--success)' : '#e74c3c'}">My: ${userAns[i] || "(Empty)"}</div>
+                    <div style="color:${isCorrect ? 'var(--success)' : '#e74c3c'}">My: ${userAns[i] || "(Empty)"} ${isCorrect ? '✓' : '✗'}</div>
                     <div style="color:gray; font-size:0.8rem;">A: ${q.a}</div>
                 </div>`;
             });
-            document.getElementById('score').innerText = `${score} / 20`;
+
+            document.getElementById('score').innerText = `${score} / ${examCount}`;
+            document.getElementById('mastery-info').innerText = `Progress: ${masteredIds.length} / ${quizData.length} Mastered`;
+            
+            const pf = document.getElementById('pass-fail');
+            pf.innerText = score >= (examCount * 0.6) ? "GOOD JOB!" : "KEEP LISTENING!";
+            pf.style.color = score >= (examCount * 0.6) ? "var(--success)" : "#e74c3c";
             document.getElementById('review').innerHTML = html;
+        }
+
+        function resetMastery() {
+            if (confirm("Reset all progress and start over?")) {
+                localStorage.removeItem('masteredIds');
+                location.reload();
+            }
         }
 
         document.getElementById('user-ans').addEventListener('keypress', (e) => { if(e.key==='Enter') next(); });
