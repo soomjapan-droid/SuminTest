@@ -7,83 +7,89 @@ const numMap = {
     "100": "one hundred", "435": "four hundred thirty-five"
 };
 
-// 함수 이름은 유지하되, 내부 로직을 관사/전치사 제거 방식으로 강화
 function clean(str) {
     if (!str) return "";
-    return str.toLowerCase()
-        .replace(/[.,!?;:]/g, "") // 문장부호 제거
-        .replace(/\b(the|a|an|is|are|of|to|and|in|at)\b/g, "") // 채점에 방해되는 관사/전치사 제거
-        .replace(/\s+/g, " ") // 중복 공백 제거
-        .trim();
+    // 특수기호만 제거하고 본래 단어는 그대로 유지
+    return str.toLowerCase().replace(/[.,!?;:]/g, "").replace(/\s+/g, " ").trim();
 }
 
 function checkIsCorrect(user, real, questionText) {
     if (!user) return false;
-    
-    const uClean = clean(user); // 이제 여기서 강화된 로직이 작동합니다.
+    const uClean = clean(user);
     const qLower = questionText.toLowerCase();
 
-    // 1. 세트 분리 (|)
+    // 1. 질문을 분석하여 '진짜 필요한 정답 개수' 파악
+    let required = 1; // 기본은 무조건 1개!
+    if (qLower.includes("three")) required = 3;
+    else if (qLower.includes("two") && !qLower.includes("one")) required = 2;
+
+    // 2. 세트 분리 (|)
     const sets = real.split('|').map(s => s.trim());
 
     return sets.some(set => {
-        // 2. 개별 정답 후보 분리 (/)
-        let targets = set.split('/').map(t => t.trim());
+        let options = set.split('/').map(t => t.trim());
         
-        // 3. 괄호 처리 포함 후보군 생성
+        // [핵심 보완] 16번 문제처럼 "Legislative, executive, and judicial" 이 통째로 1개 옵션인데 
+        // 3개를 맞춰야 하는 경우, 이 옵션 자체를 쪼개서 채점합니다.
+        if (options.length < required) {
+            let subOptions = [];
+            options.forEach(opt => {
+                subOptions.push(...opt.split(/[,]| and /).map(o => o.trim()).filter(o => o.length > 0));
+            });
+            options = subOptions;
+        }
+
+        // 3. 괄호 안팎 분리하여 모든 경우의 수 생성
         let finalCandidates = [];
-        targets.forEach(t => {
-            let base = t.toLowerCase().replace(/[.,!?;:]/g, "");
-            
-            if (base.includes('(')) {
-                const main = base.replace(/\([^)]*\)/g, "").trim();
-                const bracket = base.match(/\(([^)]+)\)/)[1].trim();
-                const full = base.replace(/[()]/g, "").trim();
-                finalCandidates.push(main, bracket, full);
+        options.forEach(opt => {
+            let base = clean(opt);
+            if (opt.includes('(')) {
+                const main = clean(opt.replace(/\([^)]*\)/g, ""));
+                const inside = clean(opt.match(/\(([^)]+)\)/)[1]);
+                const full = clean(opt.replace(/[()]/g, ""));
+                
+                if (main) finalCandidates.push(main);
+                if (inside) finalCandidates.push(inside);
+                if (full) finalCandidates.push(full);
             } else {
-                finalCandidates.push(base);
+                if (base) finalCandidates.push(base);
             }
         });
-
-        // 4. 요구 정답 개수 파악
-        let required = 1;
-        if (qLower.includes("three")) required = 3;
-        else if (qLower.includes("two")) required = 2;
 
         let found = 0;
         let tempUser = uClean;
-        let matchedTargets = new Set();
+        let matchedCandidates = new Set();
 
-        // 5. 핵심 키워드 매칭 (긴 단어 우선)
+        // 긴 단어부터 매칭 (부분 일치 꼬임 방지)
         const sortedCandidates = [...new Set(finalCandidates)].sort((a, b) => b.length - a.length);
 
         sortedCandidates.forEach(cand => {
-            const candClean = clean(cand); // 후보군도 동일하게 강화된 clean 적용
-            if (candClean.length < 1) return;
+            if (cand.length === 0) return;
 
-            // 숫자 호환성 체크 (예: 25번 문제 '2' vs 'two')
-            let isNumMatch = false;
-            for (let [num, word] of Object.entries(numMap)) {
-                if ((uClean.includes(num) || uClean.includes(word)) && 
-                    (candClean.includes(num) || candClean.includes(word))) {
-                    isNumMatch = true;
-                    break;
-                }
-            }
-
-            // 부분 일치 혹은 숫자 일치 확인
-            if (tempUser.includes(candClean) || candClean.includes(tempUser) || isNumMatch) {
-                if (!matchedTargets.has(candClean)) {
+            if (tempUser.includes(cand) || tempUser === cand) {
+                if (!matchedCandidates.has(cand)) {
                     found++;
-                    matchedTargets.add(candClean);
-                    tempUser = tempUser.replace(candClean, "");
+                    matchedCandidates.add(cand);
+                    tempUser = tempUser.replace(cand, " "); // 중복 카운트 방지
                 }
             }
         });
+
+        // 숫자 호환성 체크 (twenty-seven vs 27)
+        if (found < required) {
+            for (let [num, word] of Object.entries(numMap)) {
+                if ((uClean.includes(num) || uClean.includes(word)) && 
+                    sortedCandidates.some(c => c.includes(num) || c.includes(word))) {
+                    found++;
+                    break;
+                }
+            }
+        }
 
         return found >= required;
     });
 }
+
 function speakText(text, callback) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
@@ -97,17 +103,8 @@ function speakText(text, callback) {
 }
 
 function playQuestionAudio(id, callback) {
-    // ID를 3자리 숫자로 변환 (1 -> 001, 10 -> 010)
     const padId = String(id).padStart(3, '0');
     const audio = new Audio(`audio/q${padId}.mp3`);
-
-    if (callback) {
-        audio.onended = callback;
-    }
-
-    audio.play().catch(e => {
-        console.error("Audio file not found:", e);
-        // 파일이 없을 경우 기존 TTS로 백업 (선택 사항)
-        // speakText("Audio file missing"); 
-    });
+    if (callback) audio.onended = callback;
+    audio.play().catch(e => console.error("Audio missing:", e));
 }
