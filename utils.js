@@ -9,7 +9,7 @@ const numMap = {
 
 function clean(str) {
     if (!str) return "";
-    // [핵심] 알파벳, 숫자, 기본 공백을 제외한 '모든' 기호와 보이지 않는 유령 문자 완벽 제거
+    // 특수기호 제거, 영문/숫자/공백만 유지 (오타 검증을 위해)
     return str.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
@@ -19,21 +19,25 @@ function checkIsCorrect(user, real, questionText) {
     const uClean = clean(user);
     const qLower = questionText.toLowerCase();
 
-    // 1. 필요한 정답 개수 정확히 파악 (기본은 무조건 1개)
+    // 1. [핵심 수정] 질문이 대놓고 복수를 요구할 때만 목표 개수를 올림!
+    // "Why?"가 들어간 문장은 무조건 1개로 처리됨.
     let required = 1;
-    if (qLower.includes("three")) required = 3;
-    else if (qLower.includes("two") && !qLower.includes("one")) required = 2;
+    if (qLower.match(/\b(name|what are|give|which)\s+(the\s+)?three\b/i)) {
+        required = 3;
+    } else if (qLower.match(/\b(name|what are|give|which)\s+(the\s+)?two\b/i)) {
+        required = 2;
+    }
 
     const sets = real.split('|');
 
     return sets.some(set => {
-        let options = set.split('/');
+        let options = set.split('/').map(o => o.trim());
         
-        // 2. 세트 내 복수 정답 분리 (예: 16번 문제 대응)
+        // 2. "Senate and House" 처럼 하나의 보기로 제공되었는데 2개를 요구하는 경우 분리
         if (options.length < required) {
             let subOptions = [];
             options.forEach(opt => {
-                subOptions.push(...opt.split(/[,]| and /));
+                subOptions.push(...opt.split(/,|\band\b/i).map(s => s.trim()).filter(s => s.length > 0));
             });
             options = subOptions;
         }
@@ -43,36 +47,47 @@ function checkIsCorrect(user, real, questionText) {
         options.forEach(opt => {
             let text = opt.toLowerCase();
             if (text.includes('(')) {
-                candidates.push( clean(text.replace(/\([^)]*\)/g, "")) );
-                candidates.push( clean(text.match(/\(([^)]+)\)/)[1]) );
-                candidates.push( clean(text.replace(/[()]/g, "")) );
+                let main = text.replace(/\([^)]*\)/g, "").trim();
+                let inside = text.match(/\(([^)]+)\)/)[1].trim();
+                let full = text.replace(/[()]/g, "").trim();
+                candidates.push(clean(main), clean(inside), clean(full));
             } else {
-                candidates.push( clean(text) );
+                candidates.push(clean(text));
             }
         });
 
-        let finalCandidates = candidates.filter(c => c.length > 0);
+        // 4. "the", "a", "an" 관사를 뺀 버전도 후보에 추가하여 유연성 극대화
+        let finalCandidates = [];
+        candidates.filter(c => c.length > 0).forEach(c => {
+            finalCandidates.push(c);
+            let noArticle = c.replace(/^(the|a|an)\s+/, "").trim();
+            if (noArticle !== c && noArticle.length > 1) {
+                finalCandidates.push(noArticle);
+            }
+        });
         
-        // [필살기] 요구 개수가 1개일 때, 완벽히 똑같이 쳤으면 무조건 통과!
+        // 긴 문장부터 확인하기 위해 정렬
+        finalCandidates = [...new Set(finalCandidates)].sort((a, b) => b.length - a.length);
+
+        // [빠른 통과] 1개만 요구할 때 내 답안이 정답 리스트에 완벽히 있으면 즉시 합격!
         if (required === 1 && finalCandidates.includes(uClean)) return true;
 
         let found = 0;
         let tempUser = uClean;
         let matched = new Set();
 
-        // 4. 부분 일치 검사 (오타 및 긴 문장 방어용)
-        finalCandidates.sort((a, b) => b.length - a.length).forEach(cand => {
-            // 내가 쓴 답에 정답이 포함되어 있거나, 정답 뭉치에 내가 쓴 답이 포함되어 있을 때
-            if (tempUser.includes(cand) || (cand.includes(tempUser) && tempUser.length >= 4)) {
+        // 5. [핵심 수정] 부분 일치는 오직 '내 답안 안에 핵심 정답이 들어있는지'만 검사! (꼼수 차단)
+        finalCandidates.forEach(cand => {
+            if (tempUser.includes(cand)) {
                 if (!matched.has(cand)) {
                     found++;
                     matched.add(cand);
-                    tempUser = tempUser.replace(cand, " ");
+                    tempUser = tempUser.replace(cand, " "); // 중복 카운트 방지
                 }
             }
         });
 
-        // 5. 숫자 교차 검증 (27 vs twenty-seven)
+        // 6. 숫자-영단어 호환 검사
         if (found < required) {
             for (let [num, word] of Object.entries(numMap)) {
                 if ((uClean.includes(num) || uClean.includes(word)) && 
@@ -87,6 +102,7 @@ function checkIsCorrect(user, real, questionText) {
     });
 }
 
+// 오디오 & TTS 함수 (유지)
 function speakText(text, callback) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
