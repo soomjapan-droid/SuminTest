@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="questions.js"></script>
     <script src="utils.js"></script>
+    <script src="mastery.js"></script>
 </head>
 <body>
     <div class="card">
@@ -40,88 +41,78 @@
         <a href="index.html" class="back-link">Exit to Menu</a>
     </div>
 
-    <script>
-        // 1. 학습 데이터 로드 (맞힌 문제 ID 저장)
-        let masteredIds = JSON.parse(localStorage.getItem('masteredIds') || '[]');
+  <script>
+    // mastery.js 함수 사용
+    let availableQs = getAvailableQuestions(quizData);
+    
+    if (availableQs.length === 0) {
+        alert("Congratulations! You've mastered all questions. Resetting for review.");
+        if(resetAllProgress()) location.reload();
+    }
+
+    let examCount = Math.min(20, availableQs.length);
+    let qs = [...availableQs].sort(() => Math.random() - 0.5).slice(0, examCount);
+    
+    let idx = 0, userAns = [], sessionCorrectIds = [];
+
+    function show() {
+        document.getElementById('p-text').innerText = `QUESTION ${idx + 1} OF ${examCount}`;
+        document.getElementById('remaining-info').innerText = `Remaining: ${availableQs.length}`;
+        document.getElementById('q-text').innerText = qs[idx].q;
+        document.getElementById('user-ans').value = "";
+        document.getElementById('user-ans').focus();
+        setTimeout(speakNow, 500);
+    }
+
+    function speakNow() { playQuestionAudio ? playQuestionAudio(qs[idx].id) : speakText(qs[idx].q); }
+
+    function next() {
+        const currentAns = document.getElementById('user-ans').value;
+        userAns.push(currentAns);
         
-        // 2. 아직 맞히지 못한 문제들만 필터링
-        let availableQs = quizData.filter(q => !masteredIds.includes(q.id));
+        if (checkIsCorrect(currentAns, qs[idx].a, qs[idx].q)) {
+            sessionCorrectIds.push(qs[idx].id);
+        }
+        if (++idx < examCount) show(); else finish();
+    }
+
+    function finish() {
+        if(window.speechSynthesis) window.speechSynthesis.cancel();
         
-        // 만약 모든 문제를 다 맞혔다면 자동으로 리셋할지 안내
-        if (availableQs.length === 0) {
-            alert("Congratulations! You've mastered all questions. Resetting for review.");
-            resetMastery();
-        }
+        // 맞힌 문제들 일괄 저장
+        saveMultipleMasteredIds(sessionCorrectIds);
 
-        // 3. 남은 문제 중 무작위로 20개 선택 (남은 문제가 20개 미만이면 남은 것만)
-        let examCount = Math.min(20, availableQs.length);
-        let qs = [...availableQs].sort(() => Math.random() - 0.5).slice(0, examCount);
+        document.getElementById('exam-ui').style.display = 'none';
+        document.getElementById('result-ui').style.display = 'block';
         
-        let idx = 0, userAns = [], sessionCorrectIds = [];
+        let score = 0, html = "";
+        qs.forEach((q, i) => {
+            const isCorrect = checkIsCorrect(userAns[i], q.a, q.q);
+            if (isCorrect) score++;
+            html += `<div style="border-bottom:1px solid #eee; padding:12px 0;">
+                <div style="font-weight:bold;">${q.id}. ${q.q}</div>
+                <div style="color:${isCorrect ? 'var(--success)' : '#e74c3c'}">My: ${userAns[i] || "(Empty)"} ${isCorrect ? '✓' : '✗'}</div>
+                <div style="color:gray; font-size:0.8rem;">Correct: ${q.a}</div>
+            </div>`;
+        });
 
-        function show() {
-            document.getElementById('p-text').innerText = `QUESTION ${idx + 1} OF ${examCount}`;
-            document.getElementById('remaining-info').innerText = `Remaining: ${availableQs.length}`;
-            document.getElementById('q-text').innerText = qs[idx].q;
-            document.getElementById('user-ans').value = "";
-            document.getElementById('user-ans').focus();
-            setTimeout(speakNow, 500);
-        }
+        // 통계 정보 업데이트
+        const stats = getMasteryStats(quizData.length);
+        document.getElementById('score').innerText = `${score} / ${examCount}`;
+        document.getElementById('mastery-info').innerText = `Total Progress: ${stats.count} / ${quizData.length} Mastered (${stats.percent}%)`;
+        
+        const pf = document.getElementById('pass-fail');
+        pf.innerText = score >= (examCount * 0.6) ? "PASSED!" : "KEEP STUDYING!";
+        pf.style.color = score >= (examCount * 0.6) ? "var(--success)" : "#e74c3c";
+        document.getElementById('review').innerHTML = html;
+    }
 
-        function speakNow() { speakText(qs[idx].q); }
+    function resetMastery() {
+        if(resetAllProgress()) location.reload();
+    }
 
-        function next() {
-            const currentAns = document.getElementById('user-ans').value;
-            userAns.push(currentAns);
-            
-            // 실시간으로 맞았는지 체크해서 리스트에 보관
-            if (checkIsCorrect(currentAns, qs[idx].a, qs[idx].q)) {
-                sessionCorrectIds.push(qs[idx].id);
-            }
-
-            if (++idx < examCount) show(); else finish();
-        }
-
-        function finish() {
-            window.speechSynthesis.cancel();
-            
-            // 새롭게 맞힌 문제들 저장
-            masteredIds = [...new Set([...masteredIds, ...sessionCorrectIds])];
-            localStorage.setItem('masteredIds', JSON.stringify(masteredIds));
-
-            document.getElementById('exam-ui').style.display = 'none';
-            document.getElementById('result-ui').style.display = 'block';
-            
-            let score = 0, html = "";
-            qs.forEach((q, i) => {
-                // finish 함수 내부 (forEach 문 안에서)
-                const isCorrect = checkIsCorrect(userAns[i], q.a, q.q);
-                if (isCorrect) score++;
-                html += `<div style="border-bottom:1px solid #eee; padding:12px 0;">
-                    <div style="font-weight:bold;">${q.id}. ${q.q}</div>
-                    <div style="color:${isCorrect ? 'var(--success)' : '#e74c3c'}">My: ${userAns[i] || "(Empty)"} ${isCorrect ? '✓' : '✗'}</div>
-                    <div style="color:gray; font-size:0.8rem;">Correct: ${q.a}</div>
-                </div>`;
-            });
-
-            document.getElementById('score').innerText = `${score} / ${examCount}`;
-            document.getElementById('mastery-info').innerText = `Total Progress: ${masteredIds.length} / ${quizData.length} Mastered`;
-            
-            const pf = document.getElementById('pass-fail');
-            pf.innerText = score >= (examCount * 0.6) ? "PASSED!" : "KEEP STUDYING!";
-            pf.style.color = score >= (examCount * 0.6) ? "var(--success)" : "#e74c3c";
-            document.getElementById('review').innerHTML = html;
-        }
-
-        function resetMastery() {
-            if (confirm("Reset all progress and start over?")) {
-                localStorage.removeItem('masteredIds');
-                location.reload();
-            }
-        }
-
-        document.getElementById('user-ans').addEventListener('keypress', (e) => { if(e.key==='Enter') next(); });
-        show();
-    </script>
+    document.getElementById('user-ans').addEventListener('keypress', (e) => { if(e.key==='Enter') next(); });
+    show();
+</script>
 </body>
 </html>
