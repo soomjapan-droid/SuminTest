@@ -1,46 +1,126 @@
 <!DOCTYPE html>
-<html lang="En">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Writing Test</title>
     <link rel="stylesheet" href="style.css">
-    <script src="writing_data.js"></script>
+    <script src="utils.js"></script>
 </head>
 <body>
     <div class="card">
-        <h1>Writing Test</h1>
-        <div style="text-align:center;">
-            <span class="speaker-icon" onclick="speak()">🔊</span>
-            <p style="color:gray; font-size:0.8rem;">Click the icon and listen</p>
+        <div id="drill-ui">
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:gray; margin-bottom:10px;">
+                <span id="progress-text"></span>
+                <span>Writing Practice</span>
+            </div>
+            
+            <div style="text-align:center; margin: 20px 0;">
+                <button onclick="speakNow()" style="background:var(--primary); border:none; border-radius:50%; width:80px; height:80px; cursor:pointer; font-size:35px; color:white; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">🔊</button>
+                <p style="margin-top:15px; color:var(--primary); font-weight:bold;">Listen and Type</p>
+            </div>
+
+            <textarea id="user-ans" placeholder="Type exactly what you hear..." rows="3" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc; font-size:1.1rem; resize:none;"></textarea>
+            
+            <div id="result-mark" style="text-align:center; font-size:1.5rem; font-weight:bold; margin-top:15px; margin-bottom:10px;"></div>
+
+            <div id="ans-box" style="display:none; padding:15px; background:#f9f9f9; border-radius:10px; margin-bottom:15px;">
+                <div style="font-size:0.9rem; color:gray; margin-bottom:5px;">Correct Sentence:</div>
+                <div id="real-ans" style="font-weight:bold; font-size:1.1rem; color:#333;"></div>
+            </div>
+
+            <button id="btn" class="btn" style="background:var(--accent); color:white; margin-top:10px;" onclick="handle()">Check Sentence</button>
         </div>
-        <input type="text" id="user-ans" placeholder="Type the answer...">
-        <div id="ans-box" style="display:none; padding:15px; background:#f4f1f8; border-radius:10px; border-left:4px solid var(--writing); margin-bottom:15px;">
-            <small>Answer:</small><br><strong id="real-ans"></strong>
-        </div>
-        <button id="btn" class="btn" style="background:var(--writing); color:white;" onclick="handle()">Check the Answer</button>
-        <a href="index.html" class="back-link">stop</a>
+        
+        <a href="index.html" class="back-link">Exit to Menu</a>
     </div>
+
     <script>
-        let items = [...writingData].sort(() => Math.random() - 0.5), idx = 0;
-        function speak() {
-            const u = new SpeechSynthesisUtterance(items[idx].sentence);
-            u.lang = 'en-US'; u.rate = 0.8; window.speechSynthesis.speak(u);
+        // USCIS 공식 쓰기 시험 예문들 (필요시 별도 js 파일로 빼셔도 됩니다)
+        const writingData = [
+            "Washington is the father of our country.",
+            "Lincoln was the President during the Civil War.",
+            "Congress meets in Washington D.C.",
+            "The President lives in the White House.",
+            "Citizens have the right to vote.",
+            "We pay taxes to the government.",
+            "Thanksgiving is in November.",
+            "The flag is red, white, and blue."
+        ];
+
+        let qs = [...writingData].sort(() => Math.random() - 0.5);
+        let idx = 0;
+
+        function show() {
+            document.getElementById('progress-text').innerText = `Sentence ${idx + 1} / ${qs.length}`;
+            // document.getElementById('q-text').innerText = qs[idx]; // 원하시면 화면에 표시 가능
+            document.getElementById('user-ans').value = "";
+            document.getElementById('user-ans').disabled = false;
+            document.getElementById('ans-box').style.display = 'none';
+            document.getElementById('result-mark').innerText = "";
+            document.getElementById('btn').innerText = "Check Sentence";
+            document.getElementById('user-ans').focus();
+            setTimeout(speakNow, 500);
         }
+
+        // 문장 읽어주기 (쓰기 시험은 듣고 쓰는 것이므로 TTS 활용)
+        function speakNow() { speakText(qs[idx]); }
+
+        // 쓰기 시험 전용 채점 로직 (마침표 등 제거 + 단어/띄어쓰기 엄격 검사)
+        function checkWritingCorrect(user, real) {
+            if (!user) return false;
+            
+            // 1. 소문자 변환
+            // 2. 구두점(.,!?;:) 완벽 제거
+            // 3. 연속된 여러 공백을 하나의 공백으로 통일
+            // 4. 앞뒤 공백 제거
+            const cleanUser = user.toLowerCase().replace(/[.,!?;:]/g, "").replace(/\s+/g, " ").trim();
+            const cleanReal = real.toLowerCase().replace(/[.,!?;:]/g, "").replace(/\s+/g, " ").trim();
+            
+            // 두 결과가 스펠링과 띄어쓰기까지 완벽히 일치해야 true
+            return cleanUser === cleanReal;
+        }
+
         function handle() {
+            const btn = document.getElementById('btn');
             const box = document.getElementById('ans-box');
+            const mark = document.getElementById('result-mark');
+            const user = document.getElementById('user-ans').value;
+
             if (box.style.display === 'none') {
-                document.getElementById('real-ans').innerText = items[idx].sentence;
+                const isCorrect = checkWritingCorrect(user, qs[idx]);
+
+                if (isCorrect) {
+                    mark.innerText = "PERFECT! ✓";
+                    mark.style.color = "var(--success)";
+                } else {
+                    mark.innerText = "INCORRECT ✗";
+                    mark.style.color = "#e74c3c";
+                }
+                
+                document.getElementById('real-ans').innerText = qs[idx];
+                document.getElementById('user-ans').disabled = true;
                 box.style.display = 'block';
-                document.getElementById('btn').innerText = "Next";
+                btn.innerText = "Next Sentence";
             } else {
-                idx++; if(idx >= items.length) idx = 0;
-                document.getElementById('user-ans').value = "";
-                box.style.display = 'none';
-                document.getElementById('btn').innerText = "Check the answer";
-                setTimeout(speak, 500);
+                idx++;
+                if (idx >= qs.length) {
+                    alert("You have completed all writing practices! Restarting.");
+                    qs = [...writingData].sort(() => Math.random() - 0.5);
+                    idx = 0;
+                }
+                show();
             }
         }
-        setTimeout(speak, 800);
+
+        document.getElementById('user-ans').addEventListener('keypress', (e) => { 
+            // 텍스트 영역이므로 엔터키를 치면 줄바꿈이 아니라 채점이 되도록 설정
+            if(e.key==='Enter') {
+                e.preventDefault();
+                handle(); 
+            }
+        });
+        show();
     </script>
 </body>
 </html>
